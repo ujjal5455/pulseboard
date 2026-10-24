@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PulseBoard · Board</title>
+<style>
+  :root {
+    --bg: #0f0b1a; --card: #1a1530; --line: #2c2547; --text: #f4f1ff; --muted: #a59cc9;
+    --accent: #8b5cf6; --ok: #22c55e; --slow: #f59e0b; --lost: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); overflow: hidden;
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; gap: 1.6vh; padding: 1.8vh 1.4vw;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* Header */
+  header { display: flex; align-items: center; gap: 1.2vw; min-height: 52px; }
+  .logo { font-weight: 800; font-size: clamp(22px, 2.1vw, 38px); letter-spacing: -.02em; white-space: nowrap; }
+  .logo span { color: var(--accent); }
+  .tag { color: var(--muted); font-size: clamp(12px, .9vw, 16px); white-space: nowrap; }
+  .alert {
+    flex: 1; display: flex; justify-content: center; align-items: center; gap: 10px; visibility: hidden;
+    background: rgba(239, 68, 68, .14); border: 1px solid var(--lost); border-radius: 14px;
+    padding: 8px 16px; font-size: clamp(15px, 1.4vw, 26px); font-weight: 700; text-align: center;
+  }
+  .alert.show { visibility: visible; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { background: rgba(239, 68, 68, .3); } }
+  .controls { display: flex; gap: 8px; margin-left: auto; }
+  .ctrl {
+    background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 12px; font-size: 14px; white-space: nowrap;
+  }
+  .ctrl:hover { border-color: var(--accent); }
+  .ctrl.on { background: var(--accent); border-color: var(--accent); }
+  .conn { font-size: 13px; color: var(--slow); white-space: nowrap; }
+
+  /* Grid */
+  main {
+    flex: 1; min-height: 0; display: grid; gap: 1.6vh 1.2vw;
+    grid-template-columns: 1fr 1.25fr .8fr; grid-template-rows: 1fr minmax(150px, 32%);
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+    padding: clamp(14px, 1.3vw, 26px); display: flex; flex-direction: column; min-height: 0; min-width: 0;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .card h2 {
+    font-size: clamp(12px, .85vw, 15px); text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); font-weight: 700; display: flex; align-items: center; gap: 8px;
+  }
+  .meter { grid-column: 1; grid-row: 1; }
+  .wall { grid-column: 2; grid-row: 1; }
+  .join { grid-column: 3; grid-row: 1 / span 2; }
+  .timeline { grid-column: 1 / span 2; grid-row: 2; }
+
+  /* Lost meter */
+  .meter.hot { border-color: var(--lost); box-shadow: 0 0 40px rgba(239, 68, 68, .25); }
+  .gauge-wrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: flex-end; justify-content: center; }
+  .gauge { width: 100%; max-height: 100%; }
+  .gauge path { fill: none; stroke-width: 18; stroke-linecap: round; }
+  .gauge .track { stroke: var(--line); }
+  .gauge .fill { stroke: var(--ok); stroke-dasharray: 314.16; stroke-dashoffset: 314.16; transition: stroke-dashoffset .6s ease, stroke .3s; }
+  .pct-box { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; }
+  .pct { font-size: clamp(44px, 5.6vw, 110px); font-weight: 800; line-height: 1; letter-spacing: -.03em; }
+  .pct small { font-size: .45em; }
+  .pct-label { color: var(--muted); font-size: clamp(13px, 1vw, 18px); }
+  .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 1.4vh; text-align: center; }
+  .counts b { display: block; font-size: clamp(20px, 2vw, 38px); line-height: 1.1; }
+  .counts span { font-size: clamp(11px, .85vw, 15px); color: var(--muted); }
+  .bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; background: var(--line); margin-top: 1.2vh; }
+  .bar i { display: block; height: 100%; transition: width .6s ease; }
+
+  /* Question wall */
+  .wall-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .badge { background: var(--line); color: var(--text); border-radius: 99px; padding: 1px 9px; font-size: 12px; letter-spacing: 0; }
+  .ai-btn {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1); color: #fff; border: 0; border-radius: 10px;
+    padding: 8px 14px; font-weight: 700; font-size: clamp(13px, .9vw, 16px); white-space: nowrap;
+  }
+  .ai-btn:disabled { opacity: .6; }
+  .summary {
+    display: none; margin-top: 1.2vh; padding: 12px 14px; border-radius: 14px;
+    background: rgba(139, 92, 246, .12); border: 1px solid rgba(139, 92, 246, .5);
+  }
+  .summary.show { display: block; }
+  .summary-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin-bottom: 6px; }
+  .summary-head button { background: none; border: 0; color: var(--muted); font-size: 18px; }
+  .themes { list-style: none; display: grid; gap: 6px; }
+  .themes li { display: flex; gap: 10px; align-items: baseline; font-size: clamp(14px, 1.05vw, 19px); }
+  .themes .n { background: var(--accent); border-radius: 8px; padding: 0 8px; font-weight: 800; min-width: 30px; text-align: center; }
+  .themes small { display: block; color: var(--muted); font-size: .8em; }
+  .tip { margin-top: 8px; font-size: clamp(13px, 1vw, 17px); }
+  .source { margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .qlist { list-style: none; flex: 1; min-height: 0; overflow-y: auto; margin-top: 1.2vh; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+  .q { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .q p { font-size: clamp(15px, 1.15vw, 22px); }
+  .q time { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .q.new { animation: slide-in .5s ease, glow 2.5s ease; }
+  @keyframes slide-in { from { opacity: 0; transform: translateY(-10px); } }
+  @keyframes glow { from { border-color: var(--accent); background: rgba(139, 92, 246, .18); } }
+  .empty { color: var(--muted); text-align: center; margin: auto; font-size: clamp(14px, 1vw, 18px); }
+
+  /* Join card */
+  .join { align-items: center; text-align: center; gap: 1.4vh; }
+  .join h2 { align-self: stretch; justify-content: center; }
+  .joined { font-size: clamp(30px, 3vw, 58px); font-weight: 800; line-height: 1; }
+  .joined-label { color: var(--muted); font-size: clamp(12px, .9vw, 16px); margin-top: -.8vh; }
+  .qr { background: #fff; border-radius: 16px; padding: 10px; width: 100%; max-width: min(100%, 40vh); aspect-ratio: 1; cursor: zoom-in; border: 0; }
+  .qr img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .url { font-weight: 700; font-size: clamp(13px, 1.05vw, 20px); word-break: break-all; }
+  .hint { color: var(--muted); font-size: clamp(12px, .85vw, 15px); }
+  .ai-status { margin-top: auto; font-size: 12px; color: var(--muted); }
+
+  /* Timeline */
+  .timeline-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .peak { font-size: clamp(12px, .9vw, 16px); color: var(--text); }
+  .canvas-wrap { flex: 1; min-height: 0; margin-top: 1vh; position: relative; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* Big QR overlay */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(15, 11, 26, .94); display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 2vh; cursor: zoom-out; z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .overlay .qr { width: min(80vh, 90vw); max-width: none; cursor: zoom-out; }
+  .overlay .url { font-size: clamp(18px, 2.4vw, 44px); }
+
+  /* Small screens: stack and scroll */
+  @media (max-width: 900px) {
+    body { overflow: auto; height: auto; }
+    header { flex-wrap: wrap; }
+    .alert { order: 3; flex-basis: 100%; }
+    main { grid-template-columns: 1fr; grid-template-rows: none; }
+    .meter, .wall, .join, .timeline { grid-column: auto; grid-row: auto; }
+    .meter { min-height: 360px; }
+    .wall { max-height: 70vh; min-height: 300px; }
+    .timeline { height: 260px; }
+    .qr { max-width: 280px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">Pulse<span>Board</span></div>
+    <div class="tag">Live class pulse</div>
+  </div>
+  <div class="alert" id="alert">⚠️ <span id="alertText"></span></div>
+  <div class="controls">
+    <span class="conn" id="conn">Connecting…</span>
+    <button class="ctrl" id="demoBtn" title="Simulate a class of 36 students">▶ Demo</button>
+    <button class="ctrl" id="resetBtn" title="Clear taps, questions and timeline">↺ New class</button>
+    <button class="ctrl" id="fsBtn" title="Full screen">⛶</button>
+  </div>
+</header>
+
+<main>
+  <section class="card meter" id="meter">
+    <h2>Lost meter</h2>
+    <div class="gauge-wrap">
+      <svg class="gauge" viewBox="0 0 240 132" aria-hidden="true">
+        <path class="track" d="M20 120 A100 100 0 0 1 220 120" />
+        <path class="fill" id="gaugeFill" d="M20 120 A100 100 0 0 1 220 120" />
+      </svg>
+      <div class="pct-box">
+        <div class="pct"><span id="pct">0</span><small>%</small></div>
+        <div class="pct-label" id="pctLabel">of the class is lost</div>
+      </div>
+    </div>
+    <div class="counts">
+      <div><b id="nOk" style="color:var(--ok)">0</b><span>👍 Got it</span></div>
+      <div><b id="nSlow" style="color:var(--slow)">0</b><span>🐢 Slow down</span></div>
+      <div><b id="nLost" style="color:var(--lost)">0</b><span>😵 Lost</span></div>
+    </div>
+    <div class="bar">
+      <i id="barOk" style="background:var(--ok);width:0"></i>
+      <i id="barSlow" style="background:var(--slow);width:0"></i>
+      <i id="barLost" style="background:var(--lost);width:0"></i>
+    </div>
+  </section>
+
+  <section class="card wall">
+    <div class="wall-head">
+      <h2>Question wall <span class="badge" id="qCount">0</span></h2>
+      <button class="ai-btn" id="aiBtn">✨ AI summary</button>
+    </div>
+    <div class="summary" id="summary">
+      <div class="summary-head"><span>What the class is stuck on</span><button id="closeSummary" aria-label="Close">×</button></div>
+      <ul class="themes" id="themes"></ul>
+      <p class="tip" id="tip"></p>
+      <p class="source" id="source"></p>
+    </div>
+    <ul class="qlist" id="qlist"></ul>
+    <p class="empty" id="qEmpty">Questions from students appear here, anonymously.</p>
+  </section>
+
+  <section class="card join">
+    <h2>Join the pulse</h2>
+    <div class="joined" id="joined">0</div>
+    <div class="joined-label">students connected</div>
+    <button class="qr" id="qrBtn" title="Click to enlarge"><img id="qrImg" alt="QR code to join"></button>
+    <div class="url" id="joinUrl">…</div>
+    <div class="hint">Scan with your phone camera.<br>No app, no login, fully anonymous.</div>
+    <div class="ai-status" id="aiStatus"></div>
+  </section>
+
+  <section class="card timeline">
+    <div class="timeline-head">
+      <h2>Class timeline</h2>
+      <div class="legend"><span><i style="background:var(--lost)"></i>Lost</span><span><i style="background:var(--slow)"></i>Slow down</span></div>
+      <div class="peak" id="peak"></div>
+    </div>
+    <div class="canvas-wrap"><canvas id="chart"></canvas></div>
+  </section>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="qr"><img id="qrBig" alt="QR code to join"></div>
+  <div class="url" id="joinUrlBig"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const ALERT_PCT = 30;
+  const ARC = 314.16;
+  const MAX_SHOWN = 30;
+  const socket = io({ auth: { role: 'board' } });
+  let timeline = [];
+  let questions = [];
+
+  const hhmm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const ago = t => {
+    const s = Math.round((Date.now() - t) / 1000);
+    return s < 20 ? 'just now' : s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
+  };
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // ---------- Config: join link + QR ----------
+  async function loadConfig() {
+    const c = await (await fetch('/api/config')).json();
+    const shortUrl = c.joinUrl.replace(/^https?:\/\//, '');
+    $('qrImg').src = $('qrBig').src = c.qr;
+    $('joinUrl').textContent = $('joinUrlBig').textContent = shortUrl;
+    $('aiStatus').textContent = c.ai ? `AI: ${c.ai}` : 'AI: keyword grouping (no AI key set)';
+  }
+  loadConfig();
+
+  // ---------- Live stats ----------
+  function renderStats(s) {
+    const level = s.lostPct >= ALERT_PCT ? 'lost' : s.lostPct >= 15 ? 'slow' : 'ok';
+    const fill = $('gaugeFill');
+    fill.style.strokeDashoffset = ARC * (1 - s.lostPct / 100);
+    fill.style.stroke = `var(--${level})`;
+    fill.style.opacity = s.lostPct > 0 ? 1 : 0;
+    $('pct').textContent = s.lostPct;
+    $('pctLabel').textContent = s.joined ? `of the class is lost · ${s.lost} of ${s.joined}` : 'of the class is lost';
+    $('nOk').textContent = s.ok;
+    $('nSlow').textContent = s.slow;
+    $('nLost').textContent = s.lost;
+    $('barOk').style.width = s.okPct + '%';
+    $('barSlow').style.width = s.slowPct + '%';
+    $('barLost').style.width = s.lostPct + '%';
+    $('joined').textContent = s.joined;
+
+    const hot = s.lost > 0 && s.lostPct >= ALERT_PCT;
+    $('meter').classList.toggle('hot', hot);
+    $('alert').classList.toggle('show', hot);
+    if (hot) $('alertText').textContent = `${s.lostPct}% of the class is lost. Time for a quick recap?`;
+  }
+
+  // ---------- Question wall ----------
+  function questionItem(q, isNew) {
+    const li = document.createElement('li');
+    li.className = 'q' + (isNew ? ' new' : '');
+    const p = document.createElement('p');
+    p.textContent = q.text;
+    const t = document.createElement('time');
+    t.dataset.at = q.at;
+    t.textContent = ago(q.at);
+    li.append(p, t);
+    return li;
+  }
+  function updateQuestionCount() {
+    $('qCount').textContent = questions.length;
+    $('qEmpty').style.display = questions.length ? 'none' : '';
+  }
+  function setQuestions(list) {
+    questions = list.slice();
+    $('qlist').replaceChildren(...questions.slice(-MAX_SHOWN).reverse().map(q => questionItem(q, false)));
+    updateQuestionCount();
+  }
+  function addQuestion(q) {
+    questions.push(q);
+    $('qlist').prepend(questionItem(q, true));
+    while ($('qlist').children.length > MAX_SHOWN) $('qlist').lastChild.remove();
+    updateQuestionCount();
+  }
+  setInterval(() => document.querySelectorAll('time[data-at]').forEach(t => { t.textContent = ago(+t.dataset.at); }), 10000);
+
+  // ---------- AI summary ----------
+  $('aiBtn').addEventListener('click', async () => {
+    $('aiBtn').disabled = true;
+    $('aiBtn').textContent = 'Thinking…';
+    try {
+      showSummary(await (await fetch('/api/summary', { method: 'POST' })).json());
+    } catch {
+      showSummary({ themes: [], tip: 'Could not reach the server.', source: '' });
+    } finally {
+      $('aiBtn').disabled = false;
+      $('aiBtn').textContent = '✨ AI summary';
+    }
+  });
+  function showSummary(d) {
+    $('themes').replaceChildren(...d.themes.map(th => {
+      const li = document.createElement('li');
+      const n = document.createElement('span');
+      n.className = 'n';
+      n.textContent = th.count;
+      const body = document.createElement('span');
+      body.textContent = th.title;
+      if (th.example) {
+        const ex = document.createElement('small');
+        ex.textContent = `“${th.example}”`;
+        body.append(ex);
+      }
+      li.append(n, body);
+      return li;
+    }));
+    $('tip').textContent = d.tip ? `💡 ${d.tip}` : '';
+    $('source').textContent = d.source && d.source !== 'none' ? `Grouped by ${d.source}` : '';
+    $('summary').classList.add('show');
+  }
+  $('closeSummary').addEventListener('click', () => $('summary').classList.remove('show'));
+
+  // ---------- Timeline chart ----------
+  function drawTimeline() {
+    const canvas = $('chart');
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const pad = { l: 40, r: 14, t: 10, b: 22 };
+    const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+    const y = v => pad.t + ph * (1 - v / 100);
+    const muted = css('--muted'), line = css('--line'), lost = css('--lost'), slow = css('--slow');
+
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.lineWidth = 1;
+    for (const v of [0, 50, 100]) {
+      ctx.strokeStyle = line;
+      ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(w - pad.r, y(v)); ctx.stroke();
+      ctx.fillStyle = muted;
+      ctx.fillText(`${v}%`, 4, y(v) + 4);
+    }
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = lost;
+    ctx.globalAlpha = .7;
+    ctx.beginPath(); ctx.moveTo(pad.l, y(ALERT_PCT)); ctx.lineTo(w - pad.r, y(ALERT_PCT)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = lost;
+    ctx.textAlign = 'right';
+    ctx.fillText('Recap zone', w - pad.r - 4, y(ALERT_PCT) - 5);
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 1;
+
+    if (timeline.length < 2) {
+      ctx.fillStyle = muted;
+      ctx.textAlign = 'center';
+      ctx.fillText('The timeline fills in as students tap', pad.l + pw / 2, pad.t + ph / 2 + 18);
+      ctx.textAlign = 'left';
+      $('peak').textContent = '';
+      return;
+    }
+
+    const t0 = timeline[0].t;
+    const t1 = Math.max(timeline[timeline.length - 1].t, t0 + 120000);
+    const x = t => pad.l + pw * (t - t0) / (t1 - t0);
+    const last = timeline[timeline.length - 1];
+
+    const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ph);
+    grad.addColorStop(0, 'rgba(239, 68, 68, .45)');
+    grad.addColorStop(1, 'rgba(239, 68, 68, .02)');
+    ctx.beginPath();
+    ctx.moveTo(x(t0), y(0));
+    timeline.forEach(p => ctx.lineTo(x(p.t), y(p.lost)));
+    ctx.lineTo(x(last.t), y(0));
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    const stroke = (key, color, width) => {
+      ctx.beginPath();
+      timeline.forEach((p, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, x(p.t), y(p[key])));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    };
+    stroke('slow', slow, 2);
+    stroke('lost', lost, 3);
+
+    ctx.fillStyle = muted;
+    ctx.fillText(hhmm(t0), pad.l, h - 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(hhmm(t1), w - pad.r, h - 4);
+    ctx.textAlign = 'left';
+
+    const peak = timeline.reduce((a, b) => (b.lost > a.lost ? b : a));
+    if (peak.lost > 0) {
+      const px = x(peak.t), py = y(peak.lost);
+      ctx.fillStyle = lost;
+      ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      $('peak').textContent = `Peak: ${peak.lost}% lost at ${hhmm(peak.t)}`;
+    } else {
+      $('peak').textContent = '';
+    }
+  }
+  new ResizeObserver(drawTimeline).observe($('chart').parentElement);
+
+  // ---------- Socket events ----------
+  socket.on('connect', () => { $('conn').textContent = ''; });
+  socket.on('disconnect', () => { $('conn').textContent = 'Reconnecting…'; });
+  socket.on('init', d => {
+    timeline = d.timeline;
+    setQuestions(d.questions);
+    renderStats(d.stats);
+    setDemo(d.demo);
+    drawTimeline();
+  });
+  socket.on('stats', renderStats);
+  socket.on('sample', p => {
+    timeline.push(p);
+    if (timeline.length > 1200) timeline.shift();
+    drawTimeline();
+  });
+  socket.on('question', addQuestion);
+  socket.on('questions', setQuestions);
+  socket.on('reset', () => {
+    timeline = [];
+    setQuestions([]);
+    $('summary').classList.remove('show');
+    drawTimeline();
+  });
+  socket.on('demo', setDemo);
+  socket.on('config-changed', loadConfig);
+
+  // ---------- Controls ----------
+  let demoOn = false;
+  function setDemo(on) {
+    demoOn = on;
+    $('demoBtn').classList.toggle('on', on);
+    $('demoBtn').textContent = on ? '■ Stop demo' : '▶ Demo';
+  }
+  $('demoBtn').addEventListener('click', () => socket.emit('demo', !demoOn));
+  $('resetBtn').addEventListener('click', () => {
+    if (confirm('Start a new class? This clears taps, questions and the timeline.')) socket.emit('reset');
+  });
+  $('fsBtn').addEventListener('click', () => {
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
+  });
+  $('qrBtn').addEventListener('click', () => $('overlay').classList.add('show'));
+  $('overlay').addEventListener('click', () => $('overlay').classList.remove('show'));
+</script>
+</body>
+</html>

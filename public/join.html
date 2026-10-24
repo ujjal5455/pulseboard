@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f0b1a">
+<title>PulseBoard</title>
+<style>
+  :root {
+    --bg: #0f0b1a; --card: #1a1530; --line: #2c2547; --text: #f4f1ff; --muted: #a59cc9;
+    --accent: #8b5cf6; --ok: #22c55e; --slow: #f59e0b; --lost: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); min-height: 100dvh;
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 20px; }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 800; font-size: 20px; letter-spacing: -.02em; }
+  .logo span { color: var(--accent); }
+  .status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--slow); }
+  .dot.on { background: var(--ok); }
+  h1 { font-size: 24px; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+  .moods { display: grid; gap: 12px; }
+  .mood {
+    display: flex; align-items: center; gap: 16px; width: 100%; padding: 18px 20px;
+    border-radius: 18px; border: 2px solid var(--line); background: var(--card); color: var(--text);
+    font: inherit; font-size: 20px; font-weight: 700; text-align: left; cursor: pointer;
+    transition: transform .1s, background .2s, border-color .2s, opacity .2s;
+  }
+  .mood .emoji { font-size: 34px; line-height: 1; }
+  .mood small { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .mood:active { transform: scale(.97); }
+  .mood[data-mood="ok"].sel { background: rgba(34, 197, 94, .18); border-color: var(--ok); }
+  .mood[data-mood="slow"].sel { background: rgba(245, 158, 11, .18); border-color: var(--slow); }
+  .mood[data-mood="lost"].sel { background: rgba(239, 68, 68, .18); border-color: var(--lost); }
+  .has-sel .mood:not(.sel) { opacity: .5; }
+  .timer { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .card h2 { font-size: 17px; }
+  textarea {
+    width: 100%; min-height: 96px; resize: vertical; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px; font: inherit;
+  }
+  textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
+  .send { background: var(--accent); color: #fff; border: 0; border-radius: 12px; padding: 12px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+  .send:disabled { opacity: .5; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0;
+    background: var(--text); color: var(--bg); padding: 12px 18px; border-radius: 999px; font-weight: 600;
+    transition: .25s; pointer-events: none; max-width: calc(100% - 32px); text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Pulse<span>Board</span></div>
+    <div class="status"><i class="dot" id="dot"></i><span id="status">Connecting…</span></div>
+  </header>
+
+  <div>
+    <h1>How are you following?</h1>
+    <p class="sub">Anonymous. Your teacher only sees totals.</p>
+  </div>
+
+  <div class="moods" id="moods">
+    <button class="mood" data-mood="ok"><span class="emoji">👍</span><span>Got it<small>I'm following along</small></span></button>
+    <button class="mood" data-mood="slow"><span class="emoji">🐢</span><span>Slow down<small>A bit too fast for me</small></span></button>
+    <button class="mood" data-mood="lost"><span class="emoji">😵</span><span>I'm lost<small>I don't understand this part</small></span></button>
+  </div>
+  <p class="timer" id="timer"></p>
+
+  <form class="card" id="qform">
+    <h2>Ask anonymously</h2>
+    <textarea id="q" maxlength="200" placeholder="What's confusing you right now?"></textarea>
+    <div class="row">
+      <span id="count">0 / 200</span>
+      <button class="send" id="send" type="submit">Send</button>
+    </div>
+  </form>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const ID_KEY = 'pulseboard-id';
+
+  let clientId = null;
+  try { clientId = localStorage.getItem(ID_KEY); } catch {}
+  if (!clientId) {
+    clientId = crypto.randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try { localStorage.setItem(ID_KEY, clientId); } catch {}
+  }
+
+  const socket = io({ auth: { role: 'student', clientId } });
+  const buttons = [...document.querySelectorAll('.mood')];
+  let mood = null, expiresAt = 0, ttl = 120000;
+
+  function render() {
+    buttons.forEach(b => b.classList.toggle('sel', b.dataset.mood === mood));
+    $('moods').classList.toggle('has-sel', !!mood);
+  }
+
+  function setMood(m, left = ttl) {
+    mood = m;
+    expiresAt = m ? Date.now() + left : 0;
+    render();
+    tick();
+  }
+
+  function tick() {
+    if (mood && Date.now() >= expiresAt) { mood = null; render(); }
+    const left = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+    $('timer').textContent = mood
+      ? `Counts for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} more · tap again to clear`
+      : 'Your tap counts for 2 minutes, then resets';
+  }
+  setInterval(tick, 1000);
+
+  buttons.forEach(b => b.addEventListener('click', () => {
+    const next = mood === b.dataset.mood ? null : b.dataset.mood;
+    setMood(next);
+    socket.emit('mood', next);
+    navigator.vibrate?.(15);
+  }));
+
+  socket.on('connect', () => { $('dot').classList.add('on'); $('status').textContent = 'Live'; });
+  socket.on('disconnect', () => { $('dot').classList.remove('on'); $('status').textContent = 'Reconnecting…'; });
+  socket.on('hello', d => { ttl = d.ttl; setMood(d.mood, d.left); });
+  socket.on('reset', () => setMood(null));
+
+  function toast(msg) {
+    $('toast').textContent = msg;
+    $('toast').classList.add('show');
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => $('toast').classList.remove('show'), 2200);
+  }
+
+  const updateCount = () => { $('count').textContent = `${$('q').value.length} / 200`; };
+  $('q').addEventListener('input', updateCount);
+
+  $('qform').addEventListener('submit', e => {
+    e.preventDefault();
+    const text = $('q').value.trim();
+    if (!text) return;
+    $('send').disabled = true;
+    socket.timeout(5000).emit('question', text, (err, res) => {
+      $('send').disabled = false;
+      if (err) return toast('Not sent. Check your connection.');
+      if (!res.ok) return toast(res.error);
+      $('q').value = '';
+      updateCount();
+      toast('Sent anonymously ✓');
+    });
+  });
+</script>
+</body>
+</html>

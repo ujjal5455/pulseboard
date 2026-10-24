@@ -1,0 +1,22 @@
+{
+  "name": "pulseboard",
+  "version": "1.0.0",
+  "description": "Live I'm-lost meter and anonymous question wall for classrooms",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "share": "node server.js --share"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.3.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.4"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

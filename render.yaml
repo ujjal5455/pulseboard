@@ -1,0 +1,13 @@
+# Render Blueprint: New > Blueprint > pick this repo, and Render sets everything up.
+services:
+  - type: web
+    name: pulseboard
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false # Render asks you to paste the key when you create the Blueprint
